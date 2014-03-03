@@ -13,31 +13,30 @@ import org.apache.http.StatusLine;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.params.BasicHttpParams;
-import org.apache.http.params.HttpParams;
 import org.w3c.dom.CharacterData;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
-//import com.george.fipe.client.FipeProvider;
-//import com.george.fipe.uol.service.FipeRestService;
-//import com.george.fipe.uol.jaxb.Marca;
-
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.StrictMode;
 import android.app.Activity;
 import android.util.Log;
 import android.view.Menu;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
+import android.widget.Toast;
 
 public class MainActivity extends Activity {
 
 	private static final String LOGS = "logs";
-	private Spinner mCategory, mMarca, mModel, mYear;
+	private Spinner mCategory, mMarca, mModel;
+	private int category = 0;
+	String marca = null, modelo = null;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -45,6 +44,9 @@ public class MainActivity extends Activity {
 		setContentView(R.layout.activity_main);
 
 		mCategory = (Spinner) findViewById(R.id.spinner1);
+		mMarca = (Spinner) findViewById(R.id.spinner2);
+		mModel = (Spinner) findViewById(R.id.spinner3);
+
 		List<String> list = new ArrayList<String>();
 		list.add("Carros");
 		list.add("Motos");
@@ -54,7 +56,8 @@ public class MainActivity extends Activity {
 		dataAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
 		mCategory.setAdapter(dataAdapter);
 		
-		new DownloadFilesTask().execute();
+		mCategory.setOnItemSelectedListener(new CategoryOnItemSelectedListener());
+		mMarca.setOnItemSelectedListener(new MarcaOnItemSelectedListener());
 	}
 
 	@Override
@@ -64,16 +67,65 @@ public class MainActivity extends Activity {
 		return true;
 	}
 
-	private class DownloadFilesTask extends AsyncTask<Void, Void, Void> {
-		protected Void doInBackground(Void... trash) {
-			
-			HttpPost uri = new HttpPost("http://tabela.carros.uol.com.br/app/client/pgListMarcas.do?category=1");
-			uri.setHeader("Referer", "http://tabela.carros.uol.com.br/app/client/pgListMarcas.do");
+	private void FetchMarcas () {
+		HttpPost uri = new HttpPost("http://tabela.carros.uol.com.br/app/client/pgListMarcas.do?category=" + category);
+		uri.setHeader("Referer", "http://tabela.carros.uol.com.br/app/client/pgListMarcas.do");
 
+		if (category != 0)
+			new DownloadFilesTask().execute(uri);
+	}
+
+	private void FetchModels () {
+		HttpPost uri = new HttpPost("http://tabela.carros.uol.com.br/app/client/pgListModels.do?category=" + category + "&marca=" + marca);
+		uri.setHeader("Referer", "http://tabela.carros.uol.com.br/app/client/pgListModels.do");
+
+		if (marca != null)
+			new DownloadFilesTask().execute(uri);
+	}
+	
+	private class CategoryOnItemSelectedListener implements OnItemSelectedListener {
+
+		@Override
+		public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+			Toast.makeText(parent.getContext(), 
+				"OnItemSelectedListener : " + parent.getItemAtPosition(pos).toString(),
+				Toast.LENGTH_SHORT).show();
+			category = pos + 1;
+			MainActivity.this.FetchMarcas();
+		}
+
+		@Override
+		public void onNothingSelected(AdapterView<?> arg0) {
+			// TODO Auto-generated method stub
+			
+		}
+	}
+	
+	private class MarcaOnItemSelectedListener implements OnItemSelectedListener {
+
+		@Override
+		public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+			Toast.makeText(parent.getContext(), 
+				"OnItemSelectedListener : " + parent.getItemAtPosition(pos).toString(),
+				Toast.LENGTH_SHORT).show();
+			marca = parent.getItemAtPosition(pos).toString();
+			MainActivity.this.FetchModels();
+		}
+
+		@Override
+		public void onNothingSelected(AdapterView<?> arg0) {
+			// TODO Auto-generated method stub
+			
+		}
+	}
+	
+	private class DownloadFilesTask extends AsyncTask<HttpPost, Void, Document> {
+		protected Document doInBackground(HttpPost... uri) {
+			
 			DefaultHttpClient client = new DefaultHttpClient();
 			HttpResponse resp = null;
 			try {
-				resp = client.execute(uri);
+				resp = client.execute(uri[0]);
 			} catch (ClientProtocolException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -84,18 +136,19 @@ public class MainActivity extends Activity {
 
 			StatusLine status = resp.getStatusLine();
 			if (status.getStatusCode() != 200) {
-				Log.v(LOGS, "HTTP error, invalid server status code: " + resp.getStatusLine());  
+				Log.v(LOGS, "HTTP error, invalid server status code: " + resp.getStatusLine());
 			}
 
 			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+			Document doc = null;
 			DocumentBuilder builder = null;
+			
 			try {
 				builder = factory.newDocumentBuilder();
 			} catch (ParserConfigurationException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			Document doc = null;
 			try {
 				doc = builder.parse(resp.getEntity().getContent());
 			} catch (IllegalStateException e) {
@@ -109,29 +162,50 @@ public class MainActivity extends Activity {
 				e.printStackTrace();
 			}
 			
-			Log.v(LOGS, "Root element :" + doc.getDocumentElement().getNodeName());
+			return doc;
+		}
+		
+		protected void onPostExecute(Document doc) {
 			
-			NodeList nList = doc.getElementsByTagName("marca");
+			NodeList nList = null;
+			String name;
+			Spinner spinner = null;
+
+			name = doc.getDocumentElement().getNodeName();
+			Log.v(LOGS, "Root element: " + name);
 			
+			if (name.equals("marcas")) {
+				nList = doc.getElementsByTagName("marca");
+				spinner = mMarca;
+			}
+			else if (name.equals("modelos")) {
+				nList = doc.getElementsByTagName("modelo");
+				spinner = mModel;
+			}
+			else {
+				return;
+			}
+			
+			List<String> list = new ArrayList<String>();
+
 			for (int temp = 0; temp < nList.getLength(); temp++) {
 				 
 				Node nNode = nList.item(temp);
-				//Element line = (Element) nNode;
-		 
-				Log.v(LOGS, "\nCurrent Element :" + nNode.getNodeName());
+
+				Log.v(LOGS, "\nCurrent Element: " + nNode.getNodeName());
 				
 				Node child = nNode.getFirstChild();
 				CharacterData cd = (CharacterData) child;
 				
 				Log.v(LOGS, "CDATA: " + cd.getData());
+				
+				list.add(cd.getData());
 			}
 			
-			return null;
+			ArrayAdapter<String> dataAdapter = new ArrayAdapter<String>(MainActivity.this,
+					android.R.layout.simple_spinner_item, list);
+			dataAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+			spinner.setAdapter(dataAdapter);
 		}
-		
-		protected void onPostExecute(Void trash) {
-			//finish();
-		}
-
 	}
 }
