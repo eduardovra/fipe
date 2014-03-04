@@ -3,7 +3,9 @@ package com.example.fipe;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -35,7 +37,6 @@ import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.Spinner;
-import android.widget.Toast;
 
 public class MainActivity extends Activity {
 
@@ -43,7 +44,9 @@ public class MainActivity extends Activity {
 	private Spinner mCategory, mMarca, mModel;
 	String category = null;
 	String marca = null, modelo = null;
-	List<String> anos_celula, anos_label , precos;
+	List<String> anos_celula, anos_label;
+	Map <String, String> prizes;
+	List<String> brands, models;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -52,7 +55,9 @@ public class MainActivity extends Activity {
 
 		anos_celula = new ArrayList<String>();
 		anos_label = new ArrayList<String>();
-		precos = new ArrayList<String>();
+		prizes = new HashMap<String, String>();
+		brands = new ArrayList<String>();
+		models = new ArrayList<String>();
 		
 		mCategory = (Spinner) findViewById(R.id.spinner1);
 		mMarca = (Spinner) findViewById(R.id.spinner2);
@@ -208,29 +213,15 @@ public class MainActivity extends Activity {
 		}
 	}
 	
-	private class DownloadFilesTask extends AsyncTask<HttpPost, Void, Document> {
-		protected Document doInBackground(HttpPost... uri) {
+	private class DownloadFilesTask extends AsyncTask<HttpPost, Void, String> {
+		protected String doInBackground(HttpPost... uri) {
 			
 			DefaultHttpClient client = new DefaultHttpClient();
 			HttpResponse resp = null;
 			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
 			Document doc = null;
 			DocumentBuilder builder = null;
-			
-			try {
-				resp = client.execute(uri[0]);
-			} catch (ClientProtocolException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-
-			StatusLine status = resp.getStatusLine();
-			if (status.getStatusCode() != 200) {
-				Log.v(LOGS, "HTTP error, invalid server status code: " + resp.getStatusLine());
-			}
+			String name = null;
 			
 			try {
 				builder = factory.newDocumentBuilder();
@@ -238,83 +229,123 @@ public class MainActivity extends Activity {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			try {
-				doc = builder.parse(resp.getEntity().getContent());
-			} catch (IllegalStateException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (SAXException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
 			
-			return doc;
-		}
-		
-		protected void onPostExecute(Document doc) {
-			
-			NodeList nList = null;
-			String name;
-			Spinner spinner = null;
-
-			name = doc.getDocumentElement().getNodeName();
-			Log.v(LOGS, "Root element: " + name);
-			
-			if (name.equals("marcas")) {
-				nList = doc.getElementsByTagName("marca");
-				spinner = mMarca;
-			}
-			else if (name.equals("modelos")) {
-				nList = doc.getElementsByTagName("modelo");
-				spinner = mModel;
-			}
-			else if (name.equals("ano")) {
-				processAno(doc);
+			for (int i = 0; i < uri.length; i++) {
+				
 				try {
-					MainActivity.this.FetchPrices();
-				} catch (UnsupportedEncodingException e) {
+					resp = client.execute(uri[i]);
+				} catch (ClientProtocolException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (IOException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				return;
+	
+				StatusLine status = resp.getStatusLine();
+				if (status.getStatusCode() != 200) {
+					Log.v(LOGS, "HTTP error, invalid server status code: " + resp.getStatusLine());
+				}
+				
+				try {
+					doc = builder.parse(resp.getEntity().getContent());
+				} catch (IllegalStateException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (SAXException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				
+				name = doc.getDocumentElement().getNodeName();
+
+				if (name.equals("marcas")) {
+					processBrand(doc);
+				}
+				else if (name.equals("modelos")) {
+					processModel(doc);
+				}
+				else if (name.equals("ano")) {
+					processYear(doc);
+					try {
+						MainActivity.this.FetchPrices();
+					} catch (UnsupportedEncodingException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+				else if (name.equals("fipe")) {
+					processPrize(doc);
+					// TODO lançar intent da activity dos graficos, depois de ter recebido todos os preços
+					if (anos_label.size() == prizes.size()) {
+//						for (int j = 0; j < prizes.size(); j++) {
+							Log.v(LOGS, "key: " + prizes.toString());
+//						}
+					}
+				}
 			}
-			else if (name.equals("fipe")) {
-				processPrize(doc);
-				// TODO lançar intent da activity dos graficos
-				return;
+			
+			return name;
+		}
+
+		protected void onPostExecute (String result) {
+			// Update UI
+			
+			List<String> list = null;
+			Spinner spinner = null;
+
+			if (result.equals("marcas")) {
+				list = brands;
+				spinner = mMarca;
+			}
+			else if (result.equals("modelos")) {
+				list = models;
+				spinner = mModel;
 			}
 			else {
 				return;
 			}
 			
+			ArrayAdapter<String> dataAdapter = new ArrayAdapter<String>(MainActivity.this,
+					android.R.layout.simple_spinner_item, list);
+			dataAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+			
+			spinner.setAdapter(dataAdapter);
+		}
+		
+		private void processBrand (Document doc) {
+			NodeList nList = doc.getElementsByTagName("marca");
 			List<String> list = new ArrayList<String>();
 
 			for (int temp = 0; temp < nList.getLength(); temp++) {
-				 
 				Node nNode = nList.item(temp);
-
-				//Log.v(LOGS, "\nCurrent Element: " + nNode.getNodeName());
-				
 				Node child = nNode.getFirstChild();
 				CharacterData cd = (CharacterData) child;
-				
-				//Log.v(LOGS, "CDATA: " + cd.getData());
-				
+				list.add(cd.getData());
+				Log.v(LOGS, cd.getData());
+			}
+
+			brands = list;
+		}
+		
+		private void processModel (Document doc) {
+			NodeList nList = doc.getElementsByTagName("modelo");
+			List<String> list = new ArrayList<String>();
+
+			for (int temp = 0; temp < nList.getLength(); temp++) {
+				Node nNode = nList.item(temp);
+				Node child = nNode.getFirstChild();
+				CharacterData cd = (CharacterData) child;
 				list.add(cd.getData());
 			}
 
-			if (spinner != null) {
-				ArrayAdapter<String> dataAdapter = new ArrayAdapter<String>(MainActivity.this,
-						android.R.layout.simple_spinner_item, list);
-				dataAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-				spinner.setAdapter(dataAdapter);
-			}
+			models = list;
 		}
 		
-		private void processAno (Document doc) {
+		private void processYear (Document doc) {
 			NodeList nList = doc.getElementsByTagName("label_ano");
 			for (int temp = 0; temp < nList.getLength(); temp++) {
 				Node nNode = nList.item(temp);
@@ -326,14 +357,25 @@ public class MainActivity extends Activity {
 				Node nNode = nList.item(temp);
 				anos_celula.add(nNode.getTextContent());
 			}
+			
+			Log.v(LOGS, "anos_label size: " + anos_label.size());
 		}
 		
 		private void processPrize(Document doc) {
+			String year = null, prize = null;
 			NodeList nList = doc.getElementsByTagName("preco");
 			for (int temp = 0; temp < nList.getLength(); temp++) {
 				Node nNode = nList.item(temp);
-				precos.add(nNode.getTextContent());
+				prize = nNode.getTextContent();
 			}
+			
+			nList = doc.getElementsByTagName("label_ano");
+			for (int temp = 0; temp < nList.getLength(); temp++) {
+				Node nNode = nList.item(temp);
+				year = nNode.getTextContent();
+			}
+			
+			prizes.put(year, prize);
 		}
 	}
 }
