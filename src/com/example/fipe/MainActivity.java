@@ -94,18 +94,27 @@ public class MainActivity extends Activity {
 		return true;
 	}
 
-	private void FetchMarcas () {
-		HttpPost uri = new HttpPost("http://tabela.carros.uol.com.br/app/client/pgListMarcas.do?category=" + category);
+	private void FetchBrands () throws UnsupportedEncodingException {
+		HttpPost uri = new HttpPost("http://tabela.carros.uol.com.br/app/client/pgListMarcas.do");
 		uri.setHeader("Referer", "http://tabela.carros.uol.com.br/app/client/pgListMarcas.do");
 
+		List<NameValuePair> params = new ArrayList<NameValuePair>(2);
+		params.add(new BasicNameValuePair("category", category));
+		uri.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
+		
 		if (category != null)
 			new DownloadFilesTask().execute(uri);
 	}
 
-	private void FetchModels () {
-		HttpPost uri = new HttpPost("http://tabela.carros.uol.com.br/app/client/pgListModels.do?category=" + category + "&marca=" + marca);
+	private void FetchModels () throws UnsupportedEncodingException {
+		HttpPost uri = new HttpPost("http://tabela.carros.uol.com.br/app/client/pgListModels.do");
 		uri.setHeader("Referer", "http://tabela.carros.uol.com.br/app/client/pgListModels.do");
 
+		List<NameValuePair> params = new ArrayList<NameValuePair>(2);
+		params.add(new BasicNameValuePair("category", category));
+		params.add(new BasicNameValuePair("marca", marca));
+		uri.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
+		
 		if (marca != null)
 			new DownloadFilesTask().execute(uri);
 	}
@@ -125,6 +134,8 @@ public class MainActivity extends Activity {
 	
 	private void FetchPrices () throws UnsupportedEncodingException {
 		if (modelo != null && anos_celula != null) {
+			HttpPost uris[] = new HttpPost[anos_celula.size()];
+			
 			for (int i = 0; i < anos_celula.size(); i++) {
 				String celula = anos_celula.get(i);
 				HttpPost uri = new HttpPost("http://tabela.carros.uol.com.br/app/client/pgListPrize.do");
@@ -136,8 +147,10 @@ public class MainActivity extends Activity {
 				params.add(new BasicNameValuePair("celula", celula));
 				uri.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
 				
-				new DownloadFilesTask().execute(uri);
+				uris[i] = uri;
 			}
+			
+			new DownloadFilesTask().execute(uris);
 		}
 	}
 	
@@ -146,7 +159,12 @@ public class MainActivity extends Activity {
 		@Override
 		public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
 			category = "" + pos + 1;
-			MainActivity.this.FetchMarcas();
+			try {
+				MainActivity.this.FetchBrands();
+			} catch (UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		}
 
 		@Override
@@ -161,7 +179,12 @@ public class MainActivity extends Activity {
 		@Override
 		public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
 			marca = parent.getItemAtPosition(pos).toString();
-			MainActivity.this.FetchModels();
+			try {
+				MainActivity.this.FetchModels();
+			} catch (UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		}
 
 		@Override
